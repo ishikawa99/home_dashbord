@@ -10,7 +10,7 @@ window.DASHBOARD_CONFIG = {
 
   calendar: {
     // Google Cloud で作成した OAuth クライアントID（ウェブアプリ）。空欄の間は「デモ表示」になります。
-    googleClientId: '',
+    googleClientId: '500673253020-mjrcknmr4nqd8lun83p2v7iitktm4hdl.apps.googleusercontent.com',
     refreshMin: 3,
     staleMin: 15,
     // 表示するカレンダー。id は Googleカレンダー設定の「カレンダーID」。自分の既定は 'primary'
