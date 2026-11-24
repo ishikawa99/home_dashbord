@@ -44,7 +44,11 @@ async function fetchJSON(url, opt = {}) {
   const t = setTimeout(() => ctl.abort(), 15000);
   try {
     const r = await fetch(url, { ...opt, signal: ctl.signal });
-    if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
+    if (!r.ok) {
+      let detail = '';
+      try { const b = await r.json(); detail = b?.error?.errors?.[0]?.reason || b?.error?.status || b?.error?.message || ''; } catch { /* 本文なし */ }
+      const e = new Error('HTTP ' + r.status + (detail ? ' ' + String(detail).slice(0, 50) : '')); e.status = r.status; throw e;
+    }
     return await r.json();
   } finally { clearTimeout(t); }
 }
@@ -214,14 +218,16 @@ async function fetchCalendar() {
   const q = new URLSearchParams({ timeMin: `${t}T00:00:00+09:00`, timeMax: `${isoOf(addDays(t, 7))}T00:00:00+09:00`, singleEvents: 'true', orderBy: 'startTime', maxResults: '100' });
   const all = [];
   const results = await Promise.allSettled(C.calendar.calendars.map(async (cal) => {
-    const j = await fetchJSON(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${q}`, { headers: { Authorization: 'Bearer ' + token } });
-    return (j.items || []).filter((e) => e.status !== 'cancelled' && e.start).map((e) => normalizeEvent(e, cal));
+    try {
+      const j = await fetchJSON(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?${q}`, { headers: { Authorization: 'Bearer ' + token } });
+      return (j.items || []).filter((e) => e.status !== 'cancelled' && e.start).map((e) => normalizeEvent(e, cal));
+    } catch (e) { e.message = `${cal.name}: ${e.message}`; throw e; }
   }));
   const bad = results.filter((r) => r.status === 'rejected');
   if (bad.some((r) => r.reason?.status === 401)) { gToken = null; store.del('gtoken'); needAuth = true; $('#cal-login').hidden = false; throw new Error('要ログイン'); }
   results.forEach((r) => r.status === 'fulfilled' && all.push(...r.value));
   if (bad.length === results.length) throw bad[0].reason;
-  if (bad.length) src.calendar.partial = `${bad.length}件のカレンダーを取得できません`;
+  if (bad.length) src.calendar.partial = bad.map((r) => r.reason?.message).join(' / ');
   $('#cal-login').hidden = true;
   return all;
 }
@@ -386,10 +392,10 @@ function renderStatus() {
     const old = s.at && now - s.at > s.staleMin * 60000;
     let cls = 'ok', txt = t, tagTxt = '', tagCls = '';
     if (s.err && !s.at) { cls = 'err'; txt = `取得失敗(${s.err})`; tagTxt = '取得失敗'; tagCls = 'err'; }
-    else if (s.err) { cls = 'warn'; txt = `取得失敗 ${t}時点`; tagTxt = `取得失敗・${t}時点の情報`; tagCls = 'warn'; }
+    else if (s.err) { cls = 'warn'; txt = `取得失敗(${s.err}) ${t}時点`; tagTxt = `取得失敗・${t}時点の情報`; tagCls = 'warn'; }
     else if (!s.at) { cls = 'warn'; txt = '未取得'; }
     else if (old) { cls = 'warn'; txt = `${t} 古い情報`; tagTxt = `古い情報（${t}）`; tagCls = 'warn'; }
-    else if (s.partial && k === 'calendar') { cls = 'warn'; txt += ` ${s.partial}`; tagTxt = s.partial; tagCls = 'warn'; }
+    else if (s.partial && k === 'calendar') { cls = 'warn'; txt += ` 一部失敗(${s.partial})`; tagTxt = '一部のカレンダーを取得できません'; tagCls = 'warn'; }
     if (s.demo) { tagTxt = 'デモ表示'; tagCls = 'demo'; txt += '(デモ)'; }
     parts.push(`<span class="st ${cls}">${s.label} ${esc(txt)}</span>`);
     if (tag) { tag.textContent = tagTxt; tag.className = 'tag ' + tagCls; }
