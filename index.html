@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Home">
+<meta name="theme-color" content="#efeae0">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+<title>ホームダッシュボード</title>
+</head>
+<body>
+<div id="quake-banner" hidden></div>
+
+<main id="grid">
+  <section class="card" id="clock">
+    <div id="time">--:--</div>
+    <div id="date">&nbsp;</div>
+  </section>
+
+  <section class="card" id="weather">
+    <h2>天気 <small id="w-place"></small><span class="tag" id="tag-weather"></span></h2>
+    <div id="w-body"><div class="empty">取得中…</div></div>
+  </section>
+
+  <section class="card" id="schedule">
+    <h2>今週の予定<span id="legend"></span>
+      <button id="cal-login" class="btn small" hidden>Googleにログイン</button>
+      <a class="btn small phone-only" href="https://calendar.google.com/calendar/u/0/r/eventedit" target="_blank" rel="noopener">＋予定を登録</a>
+      <span class="tag" id="tag-calendar"></span>
+    </h2>
+    <div id="days"></div>
+  </section>
+
+  <div id="side">
+    <section class="card" id="quake">
+      <h2>地震情報 <span class="tag" id="tag-quake"></span></h2>
+      <div id="q-body"><div class="empty">取得中…</div></div>
+    </section>
+
+    <section class="card" id="shop">
+      <h2>買い物リスト <span id="shop-count"></span><span class="tag" id="tag-shop"></span></h2>
+      <form id="shop-form" class="phone-only">
+        <input id="shop-input" placeholder="商品名を入力" autocomplete="off" enterkeyhint="done">
+        <button class="btn">追加</button>
+      </form>
+      <ul id="shop-list"></ul>
+      <div id="shop-extra"></div>
+    </section>
+  </div>
+</main>
+
+<footer id="status"></footer>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h3>表示設定</h3>
+    <label>夜間モード
+      <select id="set-mode">
+        <option value="auto">自動（時刻）</option>
+        <option value="on">常に夜間</option>
+        <option value="off">常に昼間</option>
+      </select>
+    </label>
+    <label>夜間 開始 <input type="time" id="set-start"></label>
+    <label>夜間 終了 <input type="time" id="set-end"></label>
+    <div class="row">
+      <button value="cancel" class="btn">閉じる</button>
+      <button value="save" class="btn primary" id="set-save">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="config.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
