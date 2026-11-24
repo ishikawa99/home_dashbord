@@ -190,14 +190,16 @@ function loadGIS() {
 }
 async function getToken(interactive) {
   if (gToken && gToken.exp > Date.now() + 60000) return gToken.value;
-  if (!interactive && needAuth) throw new Error('要ログイン');
+  // 一度もログインしていない端末では、ポップアップ制限に引っかかるので自動試行せずボタンを出す
+  if (!interactive && (needAuth || !store.get('authed', false))) throw new Error('要ログイン');
   await loadGIS();
   return new Promise((resolve, reject) => {
+    if (!interactive) setTimeout(() => reject(new Error('要ログイン')), 8000);
     tokenClient ||= google.accounts.oauth2.initTokenClient({ client_id: C.calendar.googleClientId, scope: GSCOPE, callback: () => {}, error_callback: () => {} });
     tokenClient.callback = (r) => {
       if (r.error) return reject(new Error(r.error));
       gToken = { value: r.access_token, exp: Date.now() + r.expires_in * 1000 };
-      store.set('gtoken', gToken); needAuth = false; resolve(gToken.value);
+      store.set('gtoken', gToken); store.set('authed', true); needAuth = false; resolve(gToken.value);
     };
     tokenClient.error_callback = (e) => reject(new Error(e?.type || 'auth'));
     tokenClient.requestAccessToken({ prompt: '' });
