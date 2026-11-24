@@ -15,7 +15,7 @@ window.DASHBOARD_CONFIG = {
     staleMin: 15,
     // 表示するカレンダー。id は Googleカレンダー設定の「カレンダーID」。自分の既定は 'primary'
     calendars: [
-      { id: '500673253020-mjrcknmr4nqd8lun83p2v7iitktm4hdl.apps.googleusercontent.com', name: 'A', color: '#3b82f6' },
+      { id: 'tatsuya.0419.ishikawa@gmail.comtatu0419', name: 'A', color: '#3b82f6' },
       { id: 'REPLACE_B@gmail.com', name: 'B', color: '#ec4899' },
       { id: 'REPLACE@group.calendar.google.com', name: '共有', color: '#f59e0b' }
     ]
