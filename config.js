@@ -16,7 +16,6 @@ window.DASHBOARD_CONFIG = {
     // 表示するカレンダー。id は Googleカレンダー設定の「カレンダーID」。自分の既定は 'primary'
     calendars: [
       { id: 'primary', name: '達也', color: '#3b82f6' },
-      { id: 'ttisland.love215@gmail.com', name: '優', color: '#ec4899' },
       { id: '3fb27e96889c44b11791ef2229823ee8a57dd1c3e352538e3def5937b9134531@group.calendar.google.com', name: '共有', color: '#f59e0b' }
     ]
   },
