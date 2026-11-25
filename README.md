@@ -25,19 +25,31 @@
 ※クライアントIDは公開前提の識別子で、シークレットは使いません。アクセストークンは約1時間で失効し、自動再取得を試みます。iPadのPWAでサイレント更新が通らない場合は「要ログイン」と表示されるので再タップしてください（要件9-3の検証ポイント）。
 
 ## 4. 買い物リスト（`shopping.mode`）
-- `link`: 既存アプリ（Googleキープ等）へのリンクを表示（要件の優先案）。
-- `firebase`: 二人共有の自前リスト。Firebaseでプロジェクト作成 → Firestore有効化 → Authentication で Google を有効化 → Webアプリ設定を `config.js` の `firebase` に記入。ルール例：
+- `link`: 既存アプリ（Googleキープ等）へのリンクを表示。
+- `firebase`: 二人共有の自前リスト（下記）。
+- `local`: 端末内のみ（動作確認用、共有不可）。
+
+### Firebase の設定（無料枠で足ります）
+1. [Firebaseコンソール](https://console.firebase.google.com/)でプロジェクト作成（Google Analyticsは不要）。
+2. Build → Firestore Database → データベースを作成（本番モード、ロケーションは asia-northeast1 など）。
+3. Build → Authentication → 始める → ログイン方法で **Google** を有効化。
+4. Authentication → 設定 → 承認済みドメインに公開ドメイン（例 `yourname.github.io`）を追加。
+5. プロジェクトの設定 → マイアプリ → Webアプリ(</>)を追加し、表示される `firebaseConfig` を `config.js` の `shopping.firebase` に貼る。
+6. Firestore → ルール に下記を貼って公開（メールアドレスは二人のもの）。
 ```
 rules_version = '2';
 service cloud.firestore { match /databases/{db}/documents {
   match /shopping/{id} {
     allow read, write: if request.auth != null
-      && request.auth.token.email in ['a@gmail.com','b@gmail.com'];
+      && request.auth.token.email_verified == true
+      && request.auth.token.email in ['aさん@gmail.com','bさん@gmail.com'];
   }
 }}
 ```
-承認済みドメインに公開ドメインを追加すること。
-- `local`: 端末内のみ（動作確認用、共有不可）。
+7. `config.js`: `mode: 'firebase'`、`userNames` に二人のメールと表示名を記入。
+8. 各端末（iPad・スマホ）で買い物欄の「Googleでログイン」を一度だけタップ。ログインは端末内に保持されます。
+
+`apiKey` 等はFirebaseの公開前提の識別子で、守っているのはルールです。ルールを必ず設定してください。
 
 ## 5. 既知の制約・要検証事項
 - 地震情報は気象庁 bosai の `list.json` を直接取得します。**CORS可否は実機で要確認**（失敗時は画面に「取得失敗」と表示され、他機能は継続）。参考表示であり、緊急地震速報の代替ではありません。

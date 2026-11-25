@@ -325,9 +325,13 @@ function renderShop() {
     el.innerHTML = `<a class="btn primary" href="${esc(shopCfg.linkUrl)}" target="_blank" rel="noopener">${esc(shopCfg.linkLabel)}</a>`;
     return;
   }
-  el.innerHTML = shopNeedAuth ? '<button class="btn primary" id="shop-login">Googleでログイン</button>' : '';
-  $('#shop-login')?.addEventListener('click', () => shopNeedAuth());
   const open = shopItems.filter((i) => !i.done), done = shopItems.filter((i) => i.done);
+  el.innerHTML = shopNeedAuth ? '<button class="btn primary" id="shop-login">Googleでログイン</button>'
+    : (phone && done.length ? '<button class="btn small" id="shop-clear">購入済みを削除</button>' : '');
+  $('#shop-login')?.addEventListener('click', () => shopNeedAuth());
+  $('#shop-clear')?.addEventListener('click', () => {
+    if (confirm(`購入済み${done.length}件を削除しますか？`)) shopBackend?.clearDone().catch((e) => { src.shop.err = e.message; renderStatus(); });
+  });
   $('#shop-count').textContent = `未購入 ${open.length}`;
   $('#shop-list').innerHTML = [...open, ...done].map((i) =>
     `<li class="${i.done ? 'done' : ''}" data-id="${esc(i.id)}"><span class="ck">${i.done ? '✓' : ''}</span>` +
@@ -339,18 +343,24 @@ function localBackend() {
   return {
     add: async (name) => { shopItems.push({ id: uid(), name, done: false, by: '', at: Date.now() }); save(); },
     toggle: async (it) => { it.done = !it.done; save(); },
-    remove: async (it) => { shopItems = shopItems.filter((x) => x !== it); save(); }
+    remove: async (it) => { shopItems = shopItems.filter((x) => x !== it); save(); },
+    clearDone: async () => { shopItems = shopItems.filter((x) => !x.done); save(); }
   };
 }
 async function startFirebase() {
   try {
     const B = 'https://www.gstatic.com/firebasejs/10.12.2/';
     const [{ initializeApp }, fs, au] = await Promise.all([import(B + 'firebase-app.js'), import(B + 'firebase-firestore.js'), import(B + 'firebase-auth.js')]);
-    const app = initializeApp(shopCfg.firebase), db = fs.getFirestore(app), auth = au.getAuth(app), col = fs.collection(db, 'shopping');
+    const app = initializeApp(shopCfg.firebase);
+    let db;
+    try { db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache() }); } catch { db = fs.getFirestore(app); }  // 端末内キャッシュ（圏外でも表示・追記可）
+    const auth = au.getAuth(app), col = fs.collection(db, 'shopping');
+    const nameOf = (u) => shopCfg.userNames?.[u?.email] || u?.displayName?.split(' ')[0] || '';
     shopBackend = {
-      add: (name) => fs.addDoc(col, { name, done: false, by: auth.currentUser?.displayName?.split(' ')[0] || '', at: Date.now() }),
+      add: (name) => fs.addDoc(col, { name, done: false, by: nameOf(auth.currentUser), at: Date.now() }),
       toggle: (it) => fs.updateDoc(fs.doc(db, 'shopping', it.id), { done: !it.done }),
-      remove: (it) => fs.deleteDoc(fs.doc(db, 'shopping', it.id))
+      remove: (it) => fs.deleteDoc(fs.doc(db, 'shopping', it.id)),
+      clearDone: () => Promise.all(shopItems.filter((i) => i.done).map((i) => fs.deleteDoc(fs.doc(db, 'shopping', i.id))))
     };
     let unsub = null;
     au.onAuthStateChanged(auth, (user) => {
@@ -359,9 +369,10 @@ async function startFirebase() {
       shopNeedAuth = null;
       unsub = fs.onSnapshot(fs.query(col, fs.orderBy('at', 'asc')), (snap) => {
         shopItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        store.set('cache.shop', { at: Date.now(), data: shopItems });
-        src.shop.at = Date.now(); src.shop.err = null; renderShop(); renderStatus();
-      }, (err) => { src.shop.err = err.code || err.message; renderStatus(); });
+        store.set('cache.shop', { at: src.shop.at || Date.now(), data: shopItems });
+        if (!snap.metadata.fromCache) { src.shop.at = Date.now(); store.set('cache.shop', { at: src.shop.at, data: shopItems }); }
+        src.shop.err = null; renderShop(); renderStatus();
+      }, (err) => { src.shop.err = err.code === 'permission-denied' ? '権限なし：許可されたアカウントでログインしてください' : (err.code || err.message); renderStatus(); });
     });
   } catch (e) { src.shop.err = e.message; renderStatus(); }
 }

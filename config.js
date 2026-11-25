@@ -36,8 +36,13 @@ window.DASHBOARD_CONFIG = {
     mode: 'local',
     linkUrl: 'https://keep.google.com/',
     linkLabel: '買い物リストアプリを開く',
+    // 登録者の表示名（ログインしたGoogleアカウントのメール → 表示名）
+    userNames: {
+      'tatsuya.0419.ishikawa@gmail.com': '達也',
+      'ttisland.love215@gmail.com': '優'
+    },
     firebase: {
-      // Firebaseコンソール「プロジェクトの設定」→ Web アプリの設定をコピー
+      // Firebaseコンソール「プロジェクトの設定」→ マイアプリ → Webアプリの設定をコピー
       // apiKey: '...', authDomain: '...', projectId: '...', appId: '...'
     }
   },
