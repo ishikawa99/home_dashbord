@@ -1,8 +1,11 @@
 // ホームダッシュボード app.js  — 外部サービスへ直接アクセスする静的PWA（自宅サーバ不要）
 const C = window.DASHBOARD_CONFIG;
 // ニュース設定（config.js に news が無くても動く既定値）
-const NEWS = { refreshMin: 15, staleMin: 90, rotateSec: 12, visible: 3, max: 12,
-  feeds: [{ name: 'NHK', url: 'https://www3.nhk.or.jp/rss/news/cat0.xml' }], ...(C.news || {}) };
+const NEWS = { refreshMin: 15, staleMin: 90, rotateSec: 60, visible: 3, max: 12,
+  feeds: [
+  { name: 'NHK', url: 'https://www3.nhk.or.jp/rss/news/cat0.xml' },
+  { name: 'NHKスポーツ', url: 'https://www3.nhk.or.jp/rss/news/cat7.xml' }
+], ...(C.news || {}) };
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
