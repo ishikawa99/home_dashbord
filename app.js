@@ -75,6 +75,7 @@ function tick() {
   $('#time').textContent = t.hm;
   $('#date').textContent = `${t.y}年${t.mo}月${t.d}日 ${t.wd}曜日`;
   applyNight(t);
+  applySky(t);
   if (t.iso !== lastDayIso) { lastDayIso = t.iso; renderSchedule(); }
   if (t.h !== lastHour) { lastHour = t.h; renderWeather(); }
   renderQuake();
@@ -84,6 +85,24 @@ function tick() {
     sessionStorage.setItem('hd.reloaded.' + t.iso, '1');
     location.reload();
   }
+}
+
+/* ---------- 時計カードの空の色（時間帯で変化） ---------- */
+const SKY = [
+  [0, '#0c1226', '#05070f'], [5, '#e8926e', '#7a4f9e'], [6.7, '#d9708f', '#5b49a8'], [8.3, '#4a97e6', '#2457b8'], [15.5, '#4a97e6', '#2457b8'],
+  [17, '#e8793f', '#8c3d7a'], [18.5, '#3a3f8f', '#14183d'], [21, '#141a38', '#070914']
+];
+const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, k) => '#' + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * k).toString(16).padStart(2, '0')).join('');
+function applySky(t = jst()) {
+  const x = t.h + t.mi / 60;
+  let i = SKY.length - 1;
+  while (i > 0 && SKY[i][0] > x) i--;
+  const cur = SKY[i], nxt = SKY[(i + 1) % SKY.length];
+  const span = ((nxt[0] - cur[0]) + 24) % 24 || 24, k = Math.min(1, Math.max(0, (x - cur[0]) / span));
+  const s = document.documentElement.style;
+  s.setProperty('--sky-a', mix(cur[1], nxt[1], k));
+  s.setProperty('--sky-b', mix(cur[2], nxt[2], k));
 }
 
 /* ---------- 夜間モード ---------- */
@@ -113,11 +132,30 @@ const WMO = (c) => {
   if (c >= 95) return ['⛈️', '雷雨'];
   return ['❔', '--'];
 };
+/* 線画の天気アイコン（色はCSS変数で昼夜に追従） */
+const SVG = (b) => `<svg viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${b}</svg>`;
+const SUN = (() => {
+  let r = '<g stroke="#f5b83d" stroke-width="2.6"><circle cx="24" cy="24" r="8" fill="#f5b83d"/>';
+  for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, c = Math.cos(a), s = Math.sin(a); r += `<line x1="${(24 + c * 13).toFixed(1)}" y1="${(24 + s * 13).toFixed(1)}" x2="${(24 + c * 18).toFixed(1)}" y2="${(24 + s * 18).toFixed(1)}"/>`; }
+  return r + '</g>';
+})();
+const MOON = '<path d="M30 8.5a15.5 15.5 0 1 0 10 27.5A13 13 0 0 1 30 8.5z" fill="#cdd6ec" stroke="#cdd6ec" stroke-width="1"/>';
+const CLOUD = '<path d="M15 36a7.5 7.5 0 0 1-.8-14.95A10.5 10.5 0 0 1 34.4 19.2 8.4 8.4 0 0 1 34 36z" fill="var(--cloud)" stroke="var(--cloud-line)" stroke-width="1.6"/>';
+function wIcon(c, night) {
+  const body = night ? MOON : SUN;
+  if (c === 0 || c === 1) return SVG(body);
+  if (c === 2) return SVG(`<g transform="translate(-7 -7) scale(.78)">${body}</g><g transform="translate(5 3)">${CLOUD}</g>`);
+  if (c === 3) return SVG(CLOUD);
+  if (c === 45 || c === 48) return SVG('<g stroke="var(--cloud-line)" stroke-width="2.6"><line x1="9" y1="18" x2="39" y2="18"/><line x1="6" y1="26" x2="36" y2="26"/><line x1="12" y1="34" x2="42" y2="34"/></g>');
+  if (c >= 95) return SVG(`<g transform="translate(0 -5)">${CLOUD}</g><path d="M25 31l-6 9h5l-2 7 8-10h-5z" fill="#f5b83d"/>`);
+  if ((c >= 71 && c <= 77) || c === 85 || c === 86) return SVG(`<g transform="translate(0 -5)">${CLOUD}</g><g fill="var(--rain)"><circle cx="17" cy="38" r="2.2"/><circle cx="25" cy="42" r="2.2"/><circle cx="33" cy="38" r="2.2"/></g>`);
+  return SVG(`<g transform="translate(0 -5)">${CLOUD}</g><g stroke="var(--rain)" stroke-width="2.6"><line x1="17" y1="36" x2="14.5" y2="42"/><line x1="25" y1="36" x2="22.5" y2="42"/><line x1="33" y1="36" x2="30.5" y2="42"/></g>`);
+}
 let weatherData = store.get('cache.weather', null)?.data ?? null;
 function fetchWeather() {
   const { lat, lon } = C.location;
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    '&current=temperature_2m,weather_code' +
+    '&current=temperature_2m,weather_code,is_day' +
     '&hourly=temperature_2m,precipitation_probability,weather_code' +
     '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
     '&timezone=Asia%2FTokyo&forecast_days=2';
@@ -128,14 +166,15 @@ function renderWeather() {
   const d = weatherData;
   if (!d) return;
   const t = jst();
-  const [icon, desc] = WMO(d.current.weather_code);
+  const [, desc] = WMO(d.current.weather_code);
+  const icon = wIcon(d.current.weather_code, d.current.is_day === 0);
   let idx = d.hourly.time.findIndex((x) => x >= `${t.iso}T${String(t.h).padStart(2, '0')}:00`);
   if (idx < 0) idx = 0;
   const hours = [];
   for (let i = idx; i < idx + 12 && i < d.hourly.time.length; i++) {
-    const [hi] = WMO(d.hourly.weather_code[i]);
-    hours.push(`<div class="wh"><div class="t">${+d.hourly.time[i].slice(11, 13)}時</div><div class="i">${hi}</div>` +
-      `<div>${Math.round(d.hourly.temperature_2m[i])}°</div><div class="p">${d.hourly.precipitation_probability[i] ?? '-'}%</div></div>`);
+    const hh = +d.hourly.time[i].slice(11, 13), pp = d.hourly.precipitation_probability[i];
+    hours.push(`<div class="wh"><div class="t">${hh}時</div><div class="i">${wIcon(d.hourly.weather_code[i], hh < 6 || hh >= 18)}</div>` +
+      `<div>${Math.round(d.hourly.temperature_2m[i])}°</div><span class="p">${pp ?? '-'}%</span><span class="bar"><i style="width:${pp ?? 0}%"></i></span></div>`);
   }
   const di = Math.max(0, d.daily.time.indexOf(t.iso));
   $('#w-body').innerHTML =
@@ -241,7 +280,7 @@ function renderSchedule() {
     const MAX = 5;
     const chips = list.slice(0, MAX).map((e) => {
       const time = e.allDay ? '終日' : `${e.startHM}–${e.endHM}`;
-      return `<span class="ev" style="--c:${e.color}"><b>${time}</b>${esc(e.title)}<em>${esc(e.who)}</em></span>`;
+      return `<span class="ev" style="--c:${e.color}"><b>${time}</b><span>${esc(e.title)}</span><em>${esc(e.who)}</em></span>`;
     }).join('');
     const more = list.length > MAX ? `<span class="more">他${list.length - MAX}件</span>` : '';
     rows.push(`<div class="day ${i === 0 ? 'today' : ''} ${wd === 0 ? 'sun' : wd === 6 ? 'sat' : ''}">` +
@@ -306,7 +345,7 @@ function renderQuake() {
     `<div>M${esc(q.mag || '-')} ／ 深さ ${q.depth == null ? '-' : (q.depth === 0 ? 'ごく浅い' : Math.round(q.depth) + 'km')}</div></div></div>` +
     `<div class="q-sub">発生 ${hm(q.at)} ／ 発表 ${hm(q.rdt || q.at)}</div>` + areaLine +
     (det?.tsunami ? `<div class="q-tsu">🌊 津波：${esc(det.tsunami.slice(0, 60))}</div>` : '') +
-    `<div class="q-list">${rest.slice(0, 2).map((r) => `<div><span>${hm(r.at)}</span><span>${esc(r.area || '調査中')}</span><span>震度${INT_LABEL[r.maxi] || '-'}</span><span>M${esc(r.mag || '-')}</span></div>`).join('')}</div>`;
+    `<div class="q-list">${rest.slice(0, alert ? 1 : 2).map((r) => `<div><span>${hm(r.at)}</span><span>${esc(r.area || '調査中')}</span><span>震度${INT_LABEL[r.maxi] || '-'}</span><span>M${esc(r.mag || '-')}</span></div>`).join('')}</div>`;
 }
 
 /* ---------- 買い物リスト ---------- */
@@ -412,7 +451,7 @@ function renderStatus() {
     if (tag) { tag.textContent = tagTxt; tag.className = 'tag ' + tagCls; }
   }
   $('#status').innerHTML =
-    `<span class="st ${online ? 'ok' : 'err'}">${online ? '● オンライン' : '✕ オフライン（最終取得分を表示中）'}</span>` + parts.join('') +
+    `<span class="st ${online ? 'ok' : 'err'}">${online ? 'オンライン' : 'オフライン（最終取得分を表示中）'}</span>` + parts.join('') +
     (wakeOn ? '<span class="st">🔆 画面ON維持</span>' : '') + '<span class="sp"></span><button id="open-set" aria-label="設定">⚙︎</button>';
   $('#open-set').onclick = openSettings;
 }
