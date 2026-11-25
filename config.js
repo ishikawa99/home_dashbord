@@ -33,7 +33,7 @@ window.DASHBOARD_CONFIG = {
     // 'local'    : この端末内のみ（動作確認用・共有不可）
     // 'link'     : 既存アプリ（Googleキープ/AnyList/Bring!等）へのリンクを表示
     // 'firebase' : Firebase Firestore で二人共有（要 firebase 設定）
-    mode: 'local',
+    mode: 'firebase',
     linkUrl: 'https://keep.google.com/',
     linkLabel: '買い物リストアプリを開く',
     // 登録者の表示名（ログインしたGoogleアカウントのメール → 表示名）
@@ -43,7 +43,12 @@ window.DASHBOARD_CONFIG = {
     },
     firebase: {
       // Firebaseコンソール「プロジェクトの設定」→ マイアプリ → Webアプリの設定をコピー
-      // apiKey: '...', authDomain: '...', projectId: '...', appId: '...'
+      apiKey: 'AIzaSyBLvsVinq2uB-k7KJyU8wgAaxxlTXEDeIg',
+      authDomain: 'homedashboard-3cdf9.firebaseapp.com',
+      projectId: 'homedashboard-3cdf9',
+      storageBucket: 'homedashboard-3cdf9.firebasestorage.app',
+      messagingSenderId: '627201215252',
+      appId: '1:627201215252:web:49e0156c0a28ed22e79001'
     }
   },
 
