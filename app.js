@@ -1,5 +1,8 @@
 // ホームダッシュボード app.js  — 外部サービスへ直接アクセスする静的PWA（自宅サーバ不要）
 const C = window.DASHBOARD_CONFIG;
+// ニュース設定（config.js に news が無くても動く既定値）
+const NEWS = { refreshMin: 15, staleMin: 90, rotateSec: 12, visible: 3, max: 12,
+  feeds: [{ name: 'NHK', url: 'https://www3.nhk.or.jp/rss/news/cat0.xml' }], ...(C.news || {}) };
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -30,9 +33,10 @@ const src = {
   weather: { label: '天気', at: 0, err: null, staleMin: C.weather.staleMin },
   calendar: { label: '予定', at: 0, err: null, staleMin: C.calendar.staleMin, demo: !C.calendar.googleClientId },
   quake: { label: '地震', at: 0, err: null, staleMin: C.quake.staleMin },
-  shop: { label: '買い物', at: 0, err: null, staleMin: 1e9, off: C.shopping.mode === 'link', demo: C.shopping.mode === 'local' }
+  shop: { label: '買い物', at: 0, err: null, staleMin: 1e9, off: C.shopping.mode === 'link', demo: C.shopping.mode === 'local' },
+  news: { label: 'ニュース', at: 0, err: null, staleMin: NEWS.staleMin }
 };
-for (const k of ['weather', 'calendar', 'quake', 'shop']) {
+for (const k of ['weather', 'calendar', 'quake', 'shop', 'news']) {
   const c = store.get('cache.' + k, null);
   if (c?.at) src[k].at = c.at;
 }
@@ -72,8 +76,7 @@ function every(min, fn) { fn(); return setInterval(fn, min * 60000); }
 let lastDayIso = '', lastHour = -1;
 function tick() {
   const t = jst();
-  $('#time').textContent = t.hm;
-  $('#date').textContent = `${t.y}年${t.mo}月${t.d}日 ${t.wd}曜日`;
+  $('#date').textContent = `${t.mo}月${t.d}日 ${t.wd}曜日`;
   applyNight(t);
   applySky(t);
   if (t.iso !== lastDayIso) { lastDayIso = t.iso; renderSchedule(); }
@@ -161,7 +164,34 @@ function fetchWeather() {
     '&timezone=Asia%2FTokyo&forecast_days=2';
   return fetchJSON(u);
 }
+/* 傘・服装のひとこと（取得済みの天気から計算） */
+function renderAdvice() {
+  const el = $('#advice'), d = weatherData;
+  if (!d) return;
+  const t = jst();
+  let idx = d.hourly.time.findIndex((x) => x >= `${t.iso}T${String(t.h).padStart(2, '0')}:00`);
+  if (idx < 0) idx = 0;
+  let pmax = -1, ph = 0;
+  for (let i = idx; i < idx + 12 && i < d.hourly.time.length; i++) {
+    const p = d.hourly.precipitation_probability[i] ?? 0;
+    if (p > pmax) { pmax = p; ph = +d.hourly.time[i].slice(11, 13); }
+  }
+  let umb, lv = '';
+  if (pmax >= 60) { umb = `傘が必要（${ph}時ごろ ${pmax}%）`; lv = 'hi'; }
+  else if (pmax >= 30) { umb = `折りたたみ傘を（${ph}時ごろ ${pmax}%）`; lv = 'mid'; }
+  else umb = '傘は不要です';
+  // 18時以降は明日の服装を案内
+  let di = Math.max(0, d.daily.time.indexOf(t.iso)), label = '服装';
+  if (t.h >= 18 && d.daily.time.length > di + 1) { di += 1; label = '明日の服装'; }
+  const hi = d.daily.temperature_2m_max[di], lo = d.daily.temperature_2m_min[di];
+  const cl = hi >= 28 ? '半袖で。暑さと水分に注意' : hi >= 23 ? '半袖か薄手の長袖で' : hi >= 18 ? '長袖1枚。朝晩は羽織りを'
+    : hi >= 13 ? '上着が必要。ジャケットを' : hi >= 8 ? 'コートが必要。マフラーも安心' : '厚手のコートと防寒小物を';
+  const gap = hi - lo >= 9 ? `（寒暖差${Math.round(hi - lo)}°）` : '';
+  el.innerHTML = `<div class="adv"><span class="k">傘</span><span class="v ${lv}">${esc(umb)}</span></div>` +
+    `<div class="adv"><span class="k">${label}</span><span class="v">${esc(cl + gap)}</span></div>`;
+}
 function renderWeather() {
+  renderAdvice();
   $('#w-place').textContent = C.location.name;
   const d = weatherData;
   if (!d) return;
@@ -348,6 +378,49 @@ function renderQuake() {
     `<div class="q-list">${rest.slice(0, alert ? 1 : 2).map((r) => `<div><span>${hm(r.at)}</span><span>${esc(r.area || '調査中')}</span><span>震度${INT_LABEL[r.maxi] || '-'}</span><span>M${esc(r.mag || '-')}</span></div>`).join('')}</div>`;
 }
 
+/* ---------- ニュース（RSS：直接取得 → 中継サービスの順に試行） ---------- */
+let newsData = store.get('cache.news', null)?.data ?? null;
+let newsOffset = 0;
+async function fetchText(url) {
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 12000);
+  try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.text(); }
+  finally { clearTimeout(tm); }
+}
+function parseRSS(xml, name) {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('RSS形式エラー');
+  return [...doc.querySelectorAll('item')].map((it) => ({
+    title: (it.querySelector('title')?.textContent || '').trim(), src: name
+  })).filter((x) => x.title);
+}
+async function fetchFeed(f) {
+  const routes = [
+    async () => parseRSS(await fetchText(f.url), f.name),                                                       // 1. 直接
+    async () => { const j = JSON.parse(await fetchText('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(f.url)));
+      if (j.status !== 'ok') throw new Error('rss2json'); return (j.items || []).map((i) => ({ title: String(i.title || '').trim(), src: f.name })).filter((x) => x.title); }, // 2. rss2json
+    async () => parseRSS(await fetchText('https://api.allorigins.win/raw?url=' + encodeURIComponent(f.url)), f.name) // 3. allorigins
+  ];
+  let last;
+  for (const r of routes) { try { const items = await r(); if (items.length) return items; } catch (e) { last = e; } }
+  throw last || new Error('取得経路なし');
+}
+async function fetchNews() {
+  const res = await Promise.allSettled(NEWS.feeds.map(fetchFeed));
+  const ok = res.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value);
+  if (!ok.length) throw new Error('ニュースを取得できません');
+  const seen = new Set();
+  return ok.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, NEWS.max);
+}
+function renderNews() {
+  const ul = $('#news-list'), list = newsData || [];
+  if (!list.length) { ul.innerHTML = `<li class="none">${newsData ? 'ニュースはありません' : '取得中…'}</li>`; return; }
+  const n = Math.min(NEWS.visible, list.length), rows = [];
+  for (let i = 0; i < n; i++) { const it = list[(newsOffset + i) % list.length]; rows.push(`<li>${esc(it.title)}${NEWS.feeds.length > 1 ? `<small>${esc(it.src)}</small>` : ''}</li>`); }
+  ul.style.animation = 'none'; void ul.offsetWidth; ul.style.animation = '';
+  ul.innerHTML = rows.join('');
+}
+setInterval(() => { if (newsData?.length > NEWS.visible) { newsOffset = (newsOffset + NEWS.visible) % newsData.length; renderNews(); } }, NEWS.rotateSec * 1000);
+
 /* ---------- 買い物リスト ---------- */
 const shopCfg = C.shopping;
 let shopItems = store.get(shopCfg.mode === 'local' ? 'shop.local' : 'cache.shop', null);
@@ -487,13 +560,14 @@ phoneMQ.addEventListener?.('change', setPhone);
 setPhone();
 
 initShop();
-renderWeather(); renderSchedule(); renderQuake(); renderStatus();
+renderWeather(); renderSchedule(); renderQuake(); renderNews(); renderStatus();
 tick(); setInterval(tick, 20000);
 
 const timers = () => {
   every(C.weather.refreshMin, () => refresh('weather', fetchWeather, (d) => { weatherData = d; renderWeather(); }));
   every(C.calendar.refreshMin, () => refresh('calendar', fetchCalendar, (d) => { events = d; src.calendar.partial = src.calendar.partial; renderSchedule(); }));
   every(C.quake.refreshMin, () => refresh('quake', fetchQuake, (d) => { quakeData = d; renderQuake(); }));
+  every(NEWS.refreshMin, () => refresh('news', fetchNews, (d) => { newsData = d; newsOffset = 0; renderNews(); }));
 };
 timers();
 
@@ -507,6 +581,7 @@ const refreshAll = () => {
   refresh('weather', fetchWeather, (d) => { weatherData = d; renderWeather(); });
   refresh('calendar', fetchCalendar, (d) => { events = d; renderSchedule(); });
   refresh('quake', fetchQuake, (d) => { quakeData = d; renderQuake(); });
+  refresh('news', fetchNews, (d) => { newsData = d; newsOffset = 0; renderNews(); });
 };
 window.addEventListener('online', () => { online = true; renderStatus(); refreshAll(); });
 window.addEventListener('offline', () => { online = false; renderStatus(); });

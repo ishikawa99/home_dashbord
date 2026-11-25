@@ -52,5 +52,14 @@ window.DASHBOARD_CONFIG = {
     }
   },
 
+  news: {
+    refreshMin: 15,       // 更新間隔（分）
+    staleMin: 90,         // これより古いと「古い情報」と表示
+    rotateSec: 12,        // 見出しの切り替え間隔（秒）
+    visible: 3,           // 同時に表示する件数
+    // 取得元のRSS。複数指定可（NHK：主要ニュース）。直接取得できない場合は中継サービス経由で取得します
+    feeds: [{ name: 'NHK', url: 'https://www3.nhk.or.jp/rss/news/cat0.xml' }]
+  },
+
   night: { start: '22:00', end: '07:00' }
 };
