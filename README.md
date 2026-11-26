@@ -58,9 +58,33 @@ service cloud.firestore { match /databases/{db}/documents {
 - 毎日4:00に自動で再読み込みします（長期稼働対策）。
 - 外部APIの利用規約・無料枠は各サービスで確認してください（Open-Meteoは非商用無料）。
 
-## 6. ニュース・傘と服装（左上のカード）
-- 傘・服装は、取得済みの天気（今後12時間の降水確率、当日の最高・最低気温）から自動で判定します。18時以降は明日の服装を表示します。
-- ニュースはRSSの見出しのみを表示します（`config.js` の `news.feeds`）。最初にRSS配信元へ直接アクセスし、ブラウザから読めない場合は中継サービス（rss2json、allorigins）を順に試します。中継サービスには取得するRSSのURLだけが送られ、個人情報は送られません。
-- 無料の中継サービスは、予告なく止まる・制限されることがあります。その場合は画面下の「ニュース」が「取得失敗」や「古い情報」になります（他の機能には影響しません）。
-- 配信元の利用条件は各自で確認してください。見出しの表示のみで、リンクは開きません（常時表示画面が遷移しないようにするため）。
+## 6. 予定の取得を再ログイン不要にする（Apps Script中継）
+ブラウザで直接Googleにログインする方式（`source: 'google'`）では、アクセス権が約1時間で切れ、iPadのホーム画面アプリでは自動で更新できないため、1日に何度も再ログインが必要になります。
+そこで、Googleのサーバー上で動くApps Scriptが5分おきに予定を読み、Firebaseへ書き込みます。iPadはFirebaseを読むだけなので、Googleの再ログインが不要です（Firebaseのログインは買い物リストと共通で、切れません）。自宅サーバは不要です。
 
+### 手順（達也さんのGoogleアカウントで操作）
+1. **Firestore APIを有効化**：[Cloud Firestore API](https://console.cloud.google.com/apis/library/firestore.googleapis.com?project=500673253020) を開き、「有効にする」（Googleカレンダー用に作ったプロジェクトです）。
+2. [Apps Script](https://script.google.com/) →「新しいプロジェクト」。名前は「ダッシュボード予定同期」など。
+3. 左の「プロジェクトの設定」→「"appsscript.json" マニフェスト ファイルをエディタで表示する」をオン。エディタに戻り、`appsscript.json` の中身を、このzipの `apps-script/appsscript.json` に置き換えます。
+4. `コード.gs`（Code.gs）の中身を、`apps-script/Code.gs` に置き換えて保存。`CALENDARS` が `config.js` と同じか確認します。
+5. 「プロジェクトの設定」→「Google Cloud Platform（GCP）プロジェクト」→「プロジェクトを変更」→ プロジェクト番号 **500673253020** を入力して「プロジェクトを設定」。
+6. エディタで関数 `syncCalendar` を選び「実行」。権限の確認画面が出たら、「詳細」→「（プロジェクト名）に移動」→ すべて許可します。成功すると、Firebaseコンソール → Firestore に `dashboard` → `calendar` が作られます。
+7. 関数 `setupTrigger` を選んで「実行」（5分おきの自動実行を設定します）。
+8. **Firestoreのルールに追記**します（`shopping` のルールの下に追加）。
+```
+  match /dashboard/{id} {
+    allow read: if request.auth != null
+      && request.auth.token.email_verified == true
+      && request.auth.token.email in ['tatsuya.0419.ishikawa@gmail.com','ttisland.love215@gmail.com'];
+    allow write: if false;
+  }
+```
+9. `config.js` の `calendar.source` を `'firestore'` に変えて、GitHubにpush。iPadを開き直します（Firebaseに未ログインの端末は、予定欄のボタンから一度だけログイン）。
+
+### 注意
+- **OAuth同意画面の公開状態を「本番環境」にしてください。** 「テスト」のままだと、約7日で自動実行の権限が切れます。
+- 予定の反映は最大5分遅れます（トリガーは1分おきにもできますが、Apps Scriptの1日の実行時間の上限に近づきます）。
+- 画面下の「予定 ○○:○○」は、Apps Scriptが最後に書き込んだ時刻です。止まると15分後に「古い情報」と警告が出ます。
+- 権限のエラーが出る場合は、`appsscript.json` の `calendar.readonly` を `https://www.googleapis.com/auth/calendar` に変えてください。
+- Apps Scriptの失敗通知は、トリガー画面（時計のアイコン）で「失敗時の通知設定」から設定できます。
+- 元の方式に戻すときは、`source` を `'google'` に戻します。

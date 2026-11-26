@@ -1,8 +1,6 @@
 // ホームダッシュボード app.js  — 外部サービスへ直接アクセスする静的PWA（自宅サーバ不要）
 const C = window.DASHBOARD_CONFIG;
-// ニュース設定（config.js に news が無くても動く既定値）
-const NEWS = { refreshMin: 15, staleMin: 90, rotateSec: 12, visible: 3, max: 12,
-  feeds: [{ name: 'NHK', url: 'https://www3.nhk.or.jp/rss/news/cat0.xml' }], ...(C.news || {}) };
+const CAL_FS = C.calendar.source === 'firestore';   // 予定の取得方式：'google'=ブラウザで直接 / 'firestore'=Apps Script中継（ログイン不要）
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -31,12 +29,11 @@ const WD = ['日', '月', '火', '水', '木', '金', '土'];
 /* ---------- 取得状態 ---------- */
 const src = {
   weather: { label: '天気', at: 0, err: null, staleMin: C.weather.staleMin },
-  calendar: { label: '予定', at: 0, err: null, staleMin: C.calendar.staleMin, demo: !C.calendar.googleClientId },
+  calendar: { label: '予定', at: 0, err: null, staleMin: C.calendar.staleMin, demo: !CAL_FS && !C.calendar.googleClientId },
   quake: { label: '地震', at: 0, err: null, staleMin: C.quake.staleMin },
-  shop: { label: '買い物', at: 0, err: null, staleMin: 1e9, off: C.shopping.mode === 'link', demo: C.shopping.mode === 'local' },
-  news: { label: 'ニュース', at: 0, err: null, staleMin: NEWS.staleMin }
+  shop: { label: '買い物', at: 0, err: null, staleMin: 1e9, off: C.shopping.mode === 'link', demo: C.shopping.mode === 'local' }
 };
-for (const k of ['weather', 'calendar', 'quake', 'shop', 'news']) {
+for (const k of ['weather', 'calendar', 'quake', 'shop']) {
   const c = store.get('cache.' + k, null);
   if (c?.at) src[k].at = c.at;
 }
@@ -164,10 +161,28 @@ function fetchWeather() {
     '&timezone=Asia%2FTokyo&forecast_days=2';
   return fetchJSON(u);
 }
-/* 傘・服装のひとこと（取得済みの天気から計算） */
+/* ---- 傘・服装アイコン ---- */
+function umbrellaIcon(lv) {
+  const col = lv === 'hi' ? 'var(--rain)' : lv === 'mid' ? 'var(--warn)' : 'var(--sub)';
+  const dome = '<path d="M5 25C5 14 13 6 24 6s19 8 19 19q-4.75-4-9.5 0-4.75-4-9.5 0-4.75-4-9.5 0Q9.75 21 5 25z" fill="currentColor" fill-opacity=".22"/><path d="M24 6V3M24 25v14a3.5 3.5 0 0 1-7 0"/>';
+  const extra = lv === 'hi' ? '<g stroke-width="2.2"><line x1="34" y1="33" x2="32" y2="38"/><line x1="40" y1="36" x2="38" y2="41"/><line x1="10" y1="34" x2="8" y2="39"/></g>'
+    : lv === '' ? '<line x1="7" y1="41" x2="41" y2="7" stroke-width="2.8"/>' : '';
+  return SVG(`<g style="color:${col}" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"${lv === '' ? ' opacity=".6"' : ''}>${dome}${extra}</g>`);
+}
+const GARMENT = {
+  tee: ['#f08a24', 'M16 8 5 14l4.5 8 4.5-2.5V40h20V19.5l4.5 2.5 4.5-8L32 8c-1.2 3-3.8 4.5-8 4.5S17.2 11 16 8z', ''],
+  long: ['#d99a14', 'M16 8 6 13 4 38l6 1.5L13 24v16h22V24l3 15.5 6-1.5-2-25-10-5c-1.2 3-3.8 4.5-8 4.5S17.2 11 16 8z', ''],
+  jacket: ['#2fa39b', 'M16 8 6 13 4 38l6 1.5L13 24v16h22V24l3 15.5 6-1.5-2-25-10-5c-1.2 3-3.8 4.5-8 4.5S17.2 11 16 8z', '<path d="M24 12.5V40M17 31h4M27 31h4M20 9.5 24 16l4-6.5"/>'],
+  coat: ['#4b86e8', 'M16 7 6 12 4 36l6 1.5L13 22v22h22V22l3 15.5 6-1.5-2-24-10-5c-1.2 3-3.8 4.5-8 4.5S17.2 10 16 7z', '<path d="M24 11.5V44M18 8.5 24 22l6-13.5"/><circle cx="20.5" cy="29" r="1.2" fill="currentColor"/><circle cx="20.5" cy="36" r="1.2" fill="currentColor"/>']
+};
+function garmentIcon(kind) {
+  const [col, d, extra] = GARMENT[kind];
+  return SVG(`<g style="color:${col}" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="${d}" fill="currentColor" fill-opacity=".22"/>${extra}</g>`);
+}
+/* 傘・服装タイル（取得済みの天気から計算） */
 function renderAdvice() {
   const el = $('#advice'), d = weatherData;
-  if (!d) return;
+  if (!el || !d) return;
   const t = jst();
   let idx = d.hourly.time.findIndex((x) => x >= `${t.iso}T${String(t.h).padStart(2, '0')}:00`);
   if (idx < 0) idx = 0;
@@ -176,22 +191,20 @@ function renderAdvice() {
     const p = d.hourly.precipitation_probability[i] ?? 0;
     if (p > pmax) { pmax = p; ph = +d.hourly.time[i].slice(11, 13); }
   }
-  let umb, lv = '';
-  if (pmax >= 60) { umb = `傘が必要（${ph}時ごろ ${pmax}%）`; lv = 'hi'; }
-  else if (pmax >= 30) { umb = `折りたたみ傘を（${ph}時ごろ ${pmax}%）`; lv = 'mid'; }
-  else umb = '傘は不要です';
+  const lv = pmax >= 60 ? 'hi' : pmax >= 30 ? 'mid' : '';
+  const umb = lv === 'hi' ? ['傘が必要', `${ph}時ごろ 降水${pmax}%`] : lv === 'mid' ? ['折りたたみ傘を', `${ph}時ごろ 降水${pmax}%`] : ['傘は不要', `今後12時間の降水 最大${pmax}%`];
   // 18時以降は明日の服装を案内
-  let di = Math.max(0, d.daily.time.indexOf(t.iso)), label = '服装';
+  let di = Math.max(0, d.daily.time.indexOf(t.iso)), label = '今日の服装';
   if (t.h >= 18 && d.daily.time.length > di + 1) { di += 1; label = '明日の服装'; }
-  const hi = d.daily.temperature_2m_max[di], lo = d.daily.temperature_2m_min[di];
-  const cl = hi >= 28 ? '半袖で。暑さと水分に注意' : hi >= 23 ? '半袖か薄手の長袖で' : hi >= 18 ? '長袖1枚。朝晩は羽織りを'
-    : hi >= 13 ? '上着が必要。ジャケットを' : hi >= 8 ? 'コートが必要。マフラーも安心' : '厚手のコートと防寒小物を';
-  const gap = hi - lo >= 9 ? `（寒暖差${Math.round(hi - lo)}°）` : '';
-  el.innerHTML = `<div class="adv"><span class="k">傘</span><span class="v ${lv}">${esc(umb)}</span></div>` +
-    `<div class="adv"><span class="k">${label}</span><span class="v">${esc(cl + gap)}</span></div>`;
+  const hi = Math.round(d.daily.temperature_2m_max[di]), lo = Math.round(d.daily.temperature_2m_min[di]);
+  const [kind, main, note] = hi >= 28 ? ['tee', '半袖でOK', '暑さ・水分に注意'] : hi >= 23 ? ['tee', '半袖で', '薄手の羽織りがあれば安心']
+    : hi >= 18 ? ['long', '長袖1枚', '朝晩は羽織りを'] : hi >= 13 ? ['jacket', '上着が必要', 'ジャケットなど'] : hi >= 8 ? ['coat', 'コートが必要', 'マフラーも安心'] : ['coat', '厚手のコート', '防寒小物も'];
+  const gap = hi - lo >= 9 ? '・寒暖差大' : '';
+  el.innerHTML =
+    `<div class="tile ${lv}"><div class="ic">${umbrellaIcon(lv)}</div><div class="tx"><div class="k">傘</div><div class="m">${esc(umb[0])}</div><div class="s">${esc(umb[1])}</div></div></div>` +
+    `<div class="tile"><div class="ic">${garmentIcon(kind)}</div><div class="tx"><div class="k">${label}</div><div class="m">${esc(main)}</div><div class="s">${hi}° / ${lo}°・${esc(note)}${gap}</div></div></div>`;
 }
 function renderWeather() {
-  renderAdvice();
   $('#w-place').textContent = C.location.name;
   const d = weatherData;
   if (!d) return;
@@ -208,11 +221,13 @@ function renderWeather() {
   }
   const di = Math.max(0, d.daily.time.indexOf(t.iso));
   $('#w-body').innerHTML =
-    `<div id="w-now"><div id="w-icon">${icon}</div>` +
-    `<div><div id="w-temp">${Math.round(d.current.temperature_2m)}°</div><div id="w-desc">${esc(desc)}</div></div>` +
-    `<div id="w-hilo"><div><span class="hi">最高 ${Math.round(d.daily.temperature_2m_max[di])}°</span> / <span class="lo">最低 ${Math.round(d.daily.temperature_2m_min[di])}°</span></div>` +
-    `<div>降水確率 ${d.daily.precipitation_probability_max[di] ?? '-'}%</div></div></div>` +
+    `<div id="w-main"><div id="w-now"><div id="w-icon">${icon}</div>` +
+    `<div><div id="w-temp">${Math.round(d.current.temperature_2m)}°</div><div id="w-desc">${esc(desc)}</div></div></div>` +
+    '<div id="advice"></div>' +
+    `<div id="w-hilo"><div><span class="hi">${Math.round(d.daily.temperature_2m_max[di])}°</span> / <span class="lo">${Math.round(d.daily.temperature_2m_min[di])}°</span></div>` +
+    `<div class="pop">降水 ${d.daily.precipitation_probability_max[di] ?? '-'}%</div></div></div>` +
     `<div id="w-hours">${hours.join('')}</div>`;
+  renderAdvice();
 }
 
 /* ---------- スケジュール（Google Calendar） ---------- */
@@ -378,48 +393,49 @@ function renderQuake() {
     `<div class="q-list">${rest.slice(0, alert ? 1 : 2).map((r) => `<div><span>${hm(r.at)}</span><span>${esc(r.area || '調査中')}</span><span>震度${INT_LABEL[r.maxi] || '-'}</span><span>M${esc(r.mag || '-')}</span></div>`).join('')}</div>`;
 }
 
-/* ---------- ニュース（RSS：直接取得 → 中継サービスの順に試行） ---------- */
-let newsData = store.get('cache.news', null)?.data ?? null;
-let newsOffset = 0;
-async function fetchText(url) {
-  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 12000);
-  try { const r = await fetch(url, { signal: ctl.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.text(); }
-  finally { clearTimeout(tm); }
+/* ---------- Firebase 共有（買い物リスト・予定の中継で共用） ---------- */
+let fbP = null, fbUser, fbSignIn = null;
+const fbUserCbs = [];
+function onFBUser(cb) { fbUserCbs.push(cb); if (fbUser !== undefined) cb(fbUser); }
+function getFB() {
+  return (fbP ||= (async () => {
+    const B = 'https://www.gstatic.com/firebasejs/10.12.2/';
+    const [{ initializeApp }, fs, au] = await Promise.all([import(B + 'firebase-app.js'), import(B + 'firebase-firestore.js'), import(B + 'firebase-auth.js')]);
+    const app = initializeApp(shopCfg.firebase);
+    let db;
+    try { db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache() }); } catch { db = fs.getFirestore(app); }  // 端末内キャッシュ（圏外でも表示可）
+    const auth = au.getAuth(app);
+    au.onAuthStateChanged(auth, (user) => {
+      fbUser = user || null;
+      fbSignIn = user ? null : () => au.signInWithPopup(auth, new au.GoogleAuthProvider()).catch((e) => { src.shop.err = src.calendar.err = e.code; renderStatus(); });
+      fbUserCbs.forEach((cb) => cb(fbUser));
+    });
+    return { fs, au, app, db, auth };
+  })());
 }
-function parseRSS(xml, name) {
-  const doc = new DOMParser().parseFromString(xml, 'text/xml');
-  if (doc.querySelector('parsererror')) throw new Error('RSS形式エラー');
-  return [...doc.querySelectorAll('item')].map((it) => ({
-    title: (it.querySelector('title')?.textContent || '').trim(), src: name
-  })).filter((x) => x.title);
+const fbErr = (err) => (err.code === 'permission-denied' ? '権限なし：許可されたアカウントでログインしてください' : (err.code || err.message));
+
+/* 予定：Apps Script が Firestore に書き込んだデータを読む（Googleの再ログイン不要） */
+async function startCalendarFS() {
+  try {
+    const { fs, db } = await getFB();
+    let unsub = null;
+    onFBUser((user) => {
+      unsub?.(); unsub = null;
+      const btn = $('#cal-login');
+      if (!user) { btn.hidden = false; return; }
+      btn.hidden = true;
+      unsub = fs.onSnapshot(fs.doc(db, 'dashboard', 'calendar'), (snap) => {
+        if (!snap.exists()) { src.calendar.err = 'データなし（Apps Script未実行）'; renderStatus(); return; }
+        const dd = snap.data();
+        try { events = JSON.parse(dd.json); } catch { src.calendar.err = 'データ形式エラー'; renderStatus(); return; }
+        src.calendar.at = dd.updatedAt || Date.now(); src.calendar.err = null; src.calendar.partial = dd.partial || null;
+        store.set('cache.calendar', { at: src.calendar.at, data: events });
+        renderSchedule(); renderStatus();
+      }, (err) => { src.calendar.err = fbErr(err); renderStatus(); });
+    });
+  } catch (e) { src.calendar.err = e.message; renderStatus(); }
 }
-async function fetchFeed(f) {
-  const routes = [
-    async () => parseRSS(await fetchText(f.url), f.name),                                                       // 1. 直接
-    async () => { const j = JSON.parse(await fetchText('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(f.url)));
-      if (j.status !== 'ok') throw new Error('rss2json'); return (j.items || []).map((i) => ({ title: String(i.title || '').trim(), src: f.name })).filter((x) => x.title); }, // 2. rss2json
-    async () => parseRSS(await fetchText('https://api.allorigins.win/raw?url=' + encodeURIComponent(f.url)), f.name) // 3. allorigins
-  ];
-  let last;
-  for (const r of routes) { try { const items = await r(); if (items.length) return items; } catch (e) { last = e; } }
-  throw last || new Error('取得経路なし');
-}
-async function fetchNews() {
-  const res = await Promise.allSettled(NEWS.feeds.map(fetchFeed));
-  const ok = res.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value);
-  if (!ok.length) throw new Error('ニュースを取得できません');
-  const seen = new Set();
-  return ok.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, NEWS.max);
-}
-function renderNews() {
-  const ul = $('#news-list'), list = newsData || [];
-  if (!list.length) { ul.innerHTML = `<li class="none">${newsData ? 'ニュースはありません' : '取得中…'}</li>`; return; }
-  const n = Math.min(NEWS.visible, list.length), rows = [];
-  for (let i = 0; i < n; i++) { const it = list[(newsOffset + i) % list.length]; rows.push(`<li>${esc(it.title)}${NEWS.feeds.length > 1 ? `<small>${esc(it.src)}</small>` : ''}</li>`); }
-  ul.style.animation = 'none'; void ul.offsetWidth; ul.style.animation = '';
-  ul.innerHTML = rows.join('');
-}
-setInterval(() => { if (newsData?.length > NEWS.visible) { newsOffset = (newsOffset + NEWS.visible) % newsData.length; renderNews(); } }, NEWS.rotateSec * 1000);
 
 /* ---------- 買い物リスト ---------- */
 const shopCfg = C.shopping;
@@ -461,12 +477,7 @@ function localBackend() {
 }
 async function startFirebase() {
   try {
-    const B = 'https://www.gstatic.com/firebasejs/10.12.2/';
-    const [{ initializeApp }, fs, au] = await Promise.all([import(B + 'firebase-app.js'), import(B + 'firebase-firestore.js'), import(B + 'firebase-auth.js')]);
-    const app = initializeApp(shopCfg.firebase);
-    let db;
-    try { db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache() }); } catch { db = fs.getFirestore(app); }  // 端末内キャッシュ（圏外でも表示・追記可）
-    const auth = au.getAuth(app), col = fs.collection(db, 'shopping');
+    const { fs, db, auth } = await getFB(), col = fs.collection(db, 'shopping');
     const nameOf = (u) => shopCfg.userNames?.[u?.email] || u?.displayName?.split(' ')[0] || '';
     shopBackend = {
       add: (name) => fs.addDoc(col, { name, done: false, by: nameOf(auth.currentUser), at: Date.now() }),
@@ -475,16 +486,16 @@ async function startFirebase() {
       clearDone: () => Promise.all(shopItems.filter((i) => i.done).map((i) => fs.deleteDoc(fs.doc(db, 'shopping', i.id))))
     };
     let unsub = null;
-    au.onAuthStateChanged(auth, (user) => {
-      unsub?.();
-      if (!user) { shopNeedAuth = () => au.signInWithPopup(auth, new au.GoogleAuthProvider()).catch((e) => { src.shop.err = e.code; renderStatus(); }); renderShop(); return; }
+    onFBUser((user) => {
+      unsub?.(); unsub = null;
+      if (!user) { shopNeedAuth = () => fbSignIn?.(); renderShop(); return; }
       shopNeedAuth = null;
       unsub = fs.onSnapshot(fs.query(col, fs.orderBy('at', 'asc')), (snap) => {
         shopItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (!snap.metadata.fromCache) src.shop.at = Date.now();
         store.set('cache.shop', { at: src.shop.at || Date.now(), data: shopItems });
-        if (!snap.metadata.fromCache) { src.shop.at = Date.now(); store.set('cache.shop', { at: src.shop.at, data: shopItems }); }
         src.shop.err = null; renderShop(); renderStatus();
-      }, (err) => { src.shop.err = err.code === 'permission-denied' ? '権限なし：許可されたアカウントでログインしてください' : (err.code || err.message); renderStatus(); });
+      }, (err) => { src.shop.err = fbErr(err); renderStatus(); });
     });
   } catch (e) { src.shop.err = e.message; renderStatus(); }
 }
@@ -560,18 +571,19 @@ phoneMQ.addEventListener?.('change', setPhone);
 setPhone();
 
 initShop();
-renderWeather(); renderSchedule(); renderQuake(); renderNews(); renderStatus();
+if (CAL_FS) startCalendarFS();
+renderWeather(); renderSchedule(); renderQuake(); renderStatus();
 tick(); setInterval(tick, 20000);
 
 const timers = () => {
   every(C.weather.refreshMin, () => refresh('weather', fetchWeather, (d) => { weatherData = d; renderWeather(); }));
-  every(C.calendar.refreshMin, () => refresh('calendar', fetchCalendar, (d) => { events = d; src.calendar.partial = src.calendar.partial; renderSchedule(); }));
+  if (!CAL_FS) every(C.calendar.refreshMin, () => refresh('calendar', fetchCalendar, (d) => { events = d; src.calendar.partial = src.calendar.partial; renderSchedule(); }));
   every(C.quake.refreshMin, () => refresh('quake', fetchQuake, (d) => { quakeData = d; renderQuake(); }));
-  every(NEWS.refreshMin, () => refresh('news', fetchNews, (d) => { newsData = d; newsOffset = 0; renderNews(); }));
 };
 timers();
 
 $('#cal-login').addEventListener('click', async () => {
+  if (CAL_FS) return fbSignIn?.();
   try { await getToken(true); needAuth = false; $('#cal-login').hidden = true; refresh('calendar', fetchCalendar, (d) => { events = d; renderSchedule(); }); }
   catch (e) { src.calendar.err = e.message; renderStatus(); }
 });
@@ -579,9 +591,8 @@ $('#cal-login').addEventListener('click', async () => {
 // 通信状態・復帰時の再取得
 const refreshAll = () => {
   refresh('weather', fetchWeather, (d) => { weatherData = d; renderWeather(); });
-  refresh('calendar', fetchCalendar, (d) => { events = d; renderSchedule(); });
+  if (!CAL_FS) refresh('calendar', fetchCalendar, (d) => { events = d; renderSchedule(); });
   refresh('quake', fetchQuake, (d) => { quakeData = d; renderQuake(); });
-  refresh('news', fetchNews, (d) => { newsData = d; newsOffset = 0; renderNews(); });
 };
 window.addEventListener('online', () => { online = true; renderStatus(); refreshAll(); });
 window.addEventListener('offline', () => { online = false; renderStatus(); });

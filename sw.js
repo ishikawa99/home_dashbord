@@ -1,5 +1,5 @@
 // アプリ本体（同一オリジン）のみキャッシュ。外部API応答は app.js 側で端末内に保存する。
-const V = 'hd-v6';
+const V = 'hd-v7';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -13,7 +13,7 @@ self.addEventListener('fetch', (e) => {
   const r = e.request;
   if (r.method !== 'GET' || new URL(r.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(r).then((res) => {
+    fetch(r, { cache: 'no-cache' }).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(V).then((c) => c.put(r, copy)); }
       return res;
     }).catch(() => caches.match(r, { ignoreSearch: true }).then((m) => m || caches.match('index.html')))

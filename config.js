@@ -10,6 +10,9 @@ window.DASHBOARD_CONFIG = {
 
   calendar: {
     // Google Cloud で作成した OAuth クライアントID（ウェブアプリ）。空欄の間は「デモ表示」になります。
+    // 予定の取得方式。'google'=ブラウザでGoogleにログインして直接取得（約1時間ごとに再ログインが必要な場合あり）
+    //              'firestore'=Apps Script がFirebaseに書き込んだ予定を読む（Googleの再ログイン不要。README参照）
+    source: 'google',
     googleClientId: '500673253020-mjrcknmr4nqd8lun83p2v7iitktm4hdl.apps.googleusercontent.com',
     refreshMin: 3,
     staleMin: 15,
@@ -50,15 +53,6 @@ window.DASHBOARD_CONFIG = {
       messagingSenderId: '627201215252',
       appId: '1:627201215252:web:49e0156c0a28ed22e79001'
     }
-  },
-
-  news: {
-    refreshMin: 15,       // 更新間隔（分）
-    staleMin: 90,         // これより古いと「古い情報」と表示
-    rotateSec: 12,        // 見出しの切り替え間隔（秒）
-    visible: 3,           // 同時に表示する件数
-    // 取得元のRSS。複数指定可（NHK：主要ニュース）。直接取得できない場合は中継サービス経由で取得します
-    feeds: [{ name: 'NHK', url: 'https://www3.nhk.or.jp/rss/news/cat0.xml' }]
   },
 
   night: { start: '22:00', end: '07:00' }
