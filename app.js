@@ -1,4 +1,6 @@
 // ホームダッシュボード app.js  — 外部サービスへ直接アクセスする静的PWA（自宅サーバ不要）
+import { startEEW, eewStatus, simulateEEW } from './eew.js';
+
 const C = window.DASHBOARD_CONFIG;
 const CAL_FS = C.calendar.source === 'firestore';   // 予定の取得方式：'google'=ブラウザで直接 / 'firestore'=Apps Script中継（ログイン不要）
 const $ = (s) => document.querySelector(s);
@@ -106,7 +108,7 @@ function applySky(t = jst()) {
 }
 
 /* ---------- 夜間モード ---------- */
-const settings = () => ({ mode: 'auto', start: C.night.start, end: C.night.end, ...store.get('settings', {}) });
+const settings = () => ({ mode: 'auto', start: C.night.start, end: C.night.end, eewSound: C.eew?.sound !== false, ...store.get('settings', {}) });
 const toMin = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
 function applyNight(t = jst()) {
   const s = settings();
@@ -536,6 +538,7 @@ function renderStatus() {
   }
   $('#status').innerHTML =
     `<span class="st ${online ? 'ok' : 'err'}">${online ? 'オンライン' : 'オフライン（最終取得分を表示中）'}</span>` + parts.join('') +
+    (() => { const e = eewStatus(); return e.enabled ? `<span class="st ${e.connected === e.total ? 'ok' : e.connected ? 'warn' : 'err'}">速報 ${e.connected}/${e.total}接続</span>` : ''; })() +
     (wakeOn ? '<span class="st">🔆 画面ON維持</span>' : '') + '<span class="sp"></span><button id="open-set" aria-label="設定">⚙︎</button>';
   $('#open-set').onclick = openSettings;
 }
@@ -544,13 +547,17 @@ function renderStatus() {
 function openSettings() {
   const s = settings();
   $('#set-mode').value = s.mode; $('#set-start').value = s.start; $('#set-end').value = s.end;
+  $('#set-eew-sound').value = s.eewSound ? 'on' : 'off';
   $('#settings').showModal();
 }
 $('#settings').addEventListener('close', () => {
   if ($('#settings').returnValue !== 'save') return;
-  store.set('settings', { mode: $('#set-mode').value, start: $('#set-start').value || C.night.start, end: $('#set-end').value || C.night.end });
+  store.set('settings', { mode: $('#set-mode').value, start: $('#set-start').value || C.night.start, end: $('#set-end').value || C.night.end, eewSound: $('#set-eew-sound').value === 'on' });
   applyNight();
 });
+
+$('#eew-test-warn').addEventListener('click', () => { $('#settings').close('cancel'); simulateEEW('warn'); });
+$('#eew-test-info').addEventListener('click', () => { $('#settings').close('cancel'); simulateEEW('info'); });
 
 /* ---------- 画面スリープ抑止 ---------- */
 let wl = null;
@@ -571,6 +578,16 @@ phoneMQ.addEventListener?.('change', setPhone);
 setPhone();
 
 initShop();
+if (C.eew?.enabled !== false) {
+  startEEW({
+    home: { name: C.location.name, short: C.eew?.homeShort || '大田区', lat: C.eew?.home?.lat ?? C.location.lat, lon: C.eew?.home?.lon ?? C.location.lon },
+    homeAreas: C.eew?.homeAreas || ['東京都'], vp: C.eew?.vp ?? 7.0, vs: C.eew?.vs ?? 4.0,
+    sources: { wolfx: C.eew?.sources?.wolfx !== false, p2p: C.eew?.sources?.p2p !== false },
+    sound: () => settings().eewSound, onStatus: () => renderStatus()
+  });
+  const et = new URLSearchParams(location.search).get('eewtest');
+  if (et) setTimeout(() => simulateEEW(et === 'info' ? 'info' : 'warn'), 800);
+}
 if (CAL_FS) startCalendarFS();
 renderWeather(); renderSchedule(); renderQuake(); renderStatus();
 tick(); setInterval(tick, 20000);

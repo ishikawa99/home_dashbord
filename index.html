@@ -52,6 +52,24 @@
 
 <footer id="status"></footer>
 
+<div id="eew" hidden role="alert" aria-live="assertive">
+  <div id="eew-head" class="info"><span id="eew-kind"></span><span id="eew-meta"></span><button id="eew-close" aria-label="閉じる">✕</button></div>
+  <div id="eew-body">
+    <div id="eew-map">
+      <svg id="eew-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="eew-legend"><i class="lp"></i>P波（初期微動）<i class="ls"></i>S波（大きな揺れ）</div>
+    </div>
+    <div id="eew-side">
+      <div id="eew-place"></div>
+      <div id="eew-facts"></div>
+      <div id="eew-home"></div>
+      <div class="cd p"><div class="k">P波（初期微動）まで</div><div class="v"><b id="cd-p">--</b><span id="cd-p-u">秒</span></div></div>
+      <div class="cd s"><div class="k">S波（大きな揺れ）まで</div><div class="v"><b id="cd-s">--</b><span id="cd-s-u">秒</span></div></div>
+      <div id="eew-note"></div>
+    </div>
+  </div>
+</div>
+
 <dialog id="settings">
   <form method="dialog">
     <h3>表示設定</h3>
@@ -64,6 +82,16 @@
     </label>
     <label>夜間 開始 <input type="time" id="set-start"></label>
     <label>夜間 終了 <input type="time" id="set-end"></label>
+    <label>地震速報の音
+      <select id="set-eew-sound">
+        <option value="on">鳴らす</option>
+        <option value="off">鳴らさない</option>
+      </select>
+    </label>
+    <div class="row left">
+      <button type="button" class="btn" id="eew-test-warn">警報の表示テスト</button>
+      <button type="button" class="btn" id="eew-test-info">予報の表示テスト</button>
+    </div>
     <div class="row">
       <button value="cancel" class="btn">閉じる</button>
       <button value="save" class="btn primary" id="set-save">保存</button>
