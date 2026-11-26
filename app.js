@@ -159,8 +159,8 @@ function fetchWeather() {
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     '&current=temperature_2m,weather_code,is_day' +
     '&hourly=temperature_2m,precipitation_probability,weather_code' +
-    '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
-    '&timezone=Asia%2FTokyo&forecast_days=2';
+    '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+    '&timezone=Asia%2FTokyo&forecast_days=7';
   return fetchJSON(u);
 }
 /* ---- 傘・服装アイコン ---- */
@@ -222,13 +222,23 @@ function renderWeather() {
       `<div>${Math.round(d.hourly.temperature_2m[i])}°</div><span class="p">${pp ?? '-'}%</span><span class="bar"><i style="width:${pp ?? 0}%"></i></span></div>`);
   }
   const di = Math.max(0, d.daily.time.indexOf(t.iso));
+  const WD = ['日', '月', '火', '水', '木', '金', '土'];
+  const days = [];
+  for (let i = di; i < di + 7 && i < d.daily.time.length; i++) {
+    const [y, m, dd] = d.daily.time[i].split('-').map(Number);
+    const wd = new Date(Date.UTC(y, m - 1, dd)).getUTCDay(), pp = d.daily.precipitation_probability_max[i];
+    const code = d.daily.weather_code?.[i];
+    days.push(`<div class="wd${wd === 0 ? ' sun' : wd === 6 ? ' sat' : ''}${i === di ? ' today' : ''}"><div class="t">${i === di ? '今日' : `${m}/${dd}`}</div>` +
+      `<div class="dw">${i === di ? '' : WD[wd]}</div>` +
+      `<div class="i">${code == null ? '' : wIcon(code, false)}</div>` +
+      `<div><span class="hi">${Math.round(d.daily.temperature_2m_max[i])}°</span><span class="lo">${Math.round(d.daily.temperature_2m_min[i])}°</span></div>` +
+      `<span class="p">${pp ?? '-'}%</span></div>`);
+  }
   $('#w-body').innerHTML =
     `<div id="w-main"><div id="w-now"><div id="w-icon">${icon}</div>` +
     `<div><div id="w-temp">${Math.round(d.current.temperature_2m)}°</div><div id="w-desc">${esc(desc)}</div></div></div>` +
-    '<div id="advice"></div>' +
-    `<div id="w-hilo"><div><span class="hi">${Math.round(d.daily.temperature_2m_max[di])}°</span> / <span class="lo">${Math.round(d.daily.temperature_2m_min[di])}°</span></div>` +
-    `<div class="pop">降水 ${d.daily.precipitation_probability_max[di] ?? '-'}%</div></div></div>` +
-    `<div id="w-hours">${hours.join('')}</div>`;
+    '<div id="advice"></div></div>' +
+    `<div id="w-low"><div id="w-hours">${hours.join('')}</div><div id="w-week">${days.join('')}</div></div>`;
   renderAdvice();
 }
 

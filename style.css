@@ -29,7 +29,7 @@ button,input,select{font:inherit;color:inherit}
 #grid{
   flex:1;min-height:0;display:grid;gap:14px;padding:14px 14px 6px;
   grid-template-columns:1.5fr 1fr;
-  grid-template-rows:minmax(0,39fr) minmax(0,61fr);
+  grid-template-rows:minmax(0,43fr) minmax(0,57fr);
   grid-template-areas:"weather weather" "schedule side";
 }
 #weather{grid-area:weather}#schedule{grid-area:schedule}
@@ -59,9 +59,9 @@ h2 small{font-weight:500;letter-spacing:0}
 #w-body{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px}
 #w-main{display:flex;align-items:center;gap:20px;flex:1;min-height:0;overflow:hidden}
 #w-now{flex:none;display:flex;align-items:center;gap:14px}
-#w-icon{width:min(11vh,90px);height:min(11vh,90px);flex:none}
+#w-icon{width:min(10vh,82px);height:min(10vh,82px);flex:none}
 #w-icon svg,.wh .i svg{width:100%;height:100%;display:block}
-#w-temp{font-size:min(8.5vh,70px);font-weight:200;line-height:1;letter-spacing:-.03em}
+#w-temp{font-size:min(7.6vh,64px);font-weight:200;line-height:1;letter-spacing:-.03em}
 #w-desc{font-size:clamp(13px,2.3vh,21px);font-weight:500;margin-top:3px;white-space:nowrap}
 #advice{flex:1;min-width:0;align-self:stretch;display:flex;gap:12px;padding:2px 0}
 .tile{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:4px 14px 4px 10px;border-radius:22px;background:var(--bg)}
@@ -76,7 +76,16 @@ h2 small{font-weight:500;letter-spacing:0}
 #w-hilo{flex:none;text-align:right;font-size:clamp(22px,4.4vh,38px);line-height:1.15;font-variant-numeric:tabular-nums}
 #w-hilo .pop{font-size:.5em;color:var(--sub)}
 .hi{color:var(--hi);font-weight:600}.lo{color:var(--lo);font-weight:600}
-#w-hours{display:flex;gap:2px;justify-content:space-between;padding-top:6px;border-top:1px solid var(--line)}
+#w-low{flex:none;display:flex;gap:18px;padding-top:6px;border-top:1px solid var(--line)}
+#w-hours{flex:12;min-width:0;display:flex;gap:2px;justify-content:space-between}
+#w-week{flex:7.4;min-width:0;display:flex;gap:2px;padding-left:16px;border-left:1px solid var(--line)}
+.wd{flex:1;min-width:0;text-align:center;font-size:clamp(12px,1.95vh,17px);line-height:1.3;font-variant-numeric:tabular-nums;border-radius:10px}
+.wd.today{background:color-mix(in srgb,var(--rain) 12%,transparent)}
+.wd .t{font-weight:600}.wd .dw{color:var(--sub);font-size:.85em;min-height:1.3em}
+.wd.sun .dw,.wd.sun .t{color:#ef6a6a}.wd.sat .dw,.wd.sat .t{color:#5aa0f0}
+.wd .i{width:min(4vh,33px);height:min(4vh,33px);margin:1px auto}.wd .i svg{width:100%;height:100%;display:block}
+.wd .hi{font-weight:700}.wd .lo{color:var(--sub);margin-left:.25em;font-size:.92em}
+.wd .p{display:block;color:var(--rain);font-size:.9em}
 .wh{flex:1;text-align:center;font-size:clamp(12px,1.95vh,17px);line-height:1.3;min-width:0;font-variant-numeric:tabular-nums}
 .wh .t{color:var(--sub)}
 .wh .i{width:min(4vh,33px);height:min(4vh,33px);margin:1px auto}
@@ -246,3 +255,7 @@ body.eew-on,body.night.eew-on{filter:none}
 @media (max-width:700px),(orientation:portrait){#eew-body{flex-direction:column}#eew-map{flex:1.2}}
 @media (prefers-reduced-motion:reduce){#eew-head.warn{animation:none}}
 dialog .row.left{justify-content:flex-start;flex-wrap:wrap}
+
+body.phone #w-low{flex-direction:column;gap:10px}
+body.phone #w-week{padding-left:0;border-left:0;border-top:1px solid var(--line);padding-top:8px;overflow-x:auto}
+body.phone .wd{min-width:58px}

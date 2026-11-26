@@ -1,5 +1,5 @@
 // アプリ本体（同一オリジン）のみキャッシュ。外部API応答は app.js 側で端末内に保存する。
-const V = 'hd-v8';
+const V = 'hd-v9';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'eew.js', 'map-data.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
